@@ -38,11 +38,7 @@ class Connection:
 
     @contextlib.contextmanager
     def cursor(self, commit=None, **kwargs):
-        return Cursor(self, autocommit if autocommit is not None else self._autocommit, **kw)
-
-        cursor = self._con.cursor(**kwargs)
-
-        yield cursor
+        yield self._con.cursor(**kwargs)
 
         if commit or (commit is None and self._autocommit):
             self.commit()
@@ -60,8 +56,8 @@ class Connection:
         self._con = None
 
     def create_engine(self):
-        from sqlalchemy import create_engine
-        return create_engine('postgresql://', creator=lambda: self._con)
+        import sqlalchemy
+        return sqlalchemy.create_engine('postgresql://', creator=lambda: self._con)
 
     def __getattr__(self, name):
         return eval(f'self._con.{name}')
