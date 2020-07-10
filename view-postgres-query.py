@@ -24,7 +24,7 @@ def kill(con, pid):
 
 def list_tables(con):
     with con.cursor() as cur:
-        cur.execute('SELECT schemaname, tablename FROM pg_catalog.pg_tables ORDER BY schemaname, tablename')
+        cur.execute("SELECT schemaname, tablename FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog', 'information_schema') ORDER BY schemaname, tablename")
         tables = cur.fetchall()
 
     for i in range(len(tables)):
