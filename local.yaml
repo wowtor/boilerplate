@@ -1,0 +1,2 @@
+#database.credentials.password: SECRET
+#database.schema: development

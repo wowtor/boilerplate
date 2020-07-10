@@ -1,0 +1,2 @@
+confidence
+psycopg2-binary
