@@ -39,7 +39,15 @@ class sha256_open:
         self._m.update(b)
         return b
 
+    def check_digest(self):
+        assert self._m.hexdigest() == self.hashvalue, 'sha256 checksum mismatch'
+
+    def close(self):
+        self.check_digest()
+        self._f.close()
+
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type is None:
-            assert self._m.hexdigest() == self.hashvalue, 'sha256 checksum mismatch'
-        self._f.close()
+            self.check_digest()
+
+        self._f.__exit__(exc_type, exc_value, traceback)
