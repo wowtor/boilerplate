@@ -3,8 +3,12 @@
 import argparse
 
 import confidence
+from tabulate import tabulate
 
 from postgres import pgconnect
+
+
+DEFAULT_MINIMUM_AGE = 15
 
 
 def describe_interval(d):
@@ -24,24 +28,26 @@ def kill(con, pid):
 
 def list_tables(con):
     with con.cursor() as cur:
-        cur.execute("SELECT schemaname, tablename FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog', 'information_schema') ORDER BY schemaname, tablename")
-        tables = cur.fetchall()
-
-    for i in range(len(tables)):
-        with con.cursor() as cur:
-            try:
-                cur.execute('''SELECT pg_relation_size('"{}"."{}"')'''.format(*tables[i]));
-                tables[i] = list(tables[i]) + [cur.fetchone()[0], None]
-            except Exception as e:
-                cur.execute("ROLLBACK")
-                tables[i] = list(tables[i]) + [None, str(e)]
-
-    print(tabulate(tables, headers=['schema', 'table', 'bytes', 'comment']))
-
-
-def list_queries(con, killall=False):
-    with con.cursor() as cur:
         cur.execute('''
+                WITH entry as (
+                    SELECT schemaname, tablename,
+                        '"' || schemaname || '"."' || tablename || '"' as spec
+                    FROM pg_catalog.pg_tables
+                    WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+                )
+                SELECT schemaname, tablename,
+                    pg_size_pretty(pg_table_size(spec)) table_size_pretty,
+                    pg_size_pretty(pg_total_relation_size(spec)) total_size_pretty
+                FROM entry
+                ORDER BY schemaname, pg_total_relation_size(spec) DESC
+            ''');
+
+        print(tabulate(cur.fetchall(), headers=['schema', 'table', 'table size', 'total size'], colalign=('left', 'left', 'right', 'right')))
+
+
+def list_queries(con, age=0, killall=False):
+    with con.cursor() as cur:
+        cur.execute(f'''
             SELECT
                 pid,
                 now() - pg_stat_activity.query_start AS duration,
@@ -49,7 +55,7 @@ def list_queries(con, killall=False):
                 state
             FROM pg_stat_activity
             WHERE state = 'active'
-                AND (now() - pg_stat_activity.query_start) > interval '15 seconds'
+                AND (now() - pg_stat_activity.query_start) > interval '{age} seconds'
             ORDER BY duration DESC
         ''')
 
@@ -65,17 +71,19 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='View long running queries.')
     parser.add_argument('--tables', help="List tables.", action='store_true')
-    parser.add_argument('--queries', help="list queries.", action='store_true')
-    parser.add_argument('--killall', help="kill all long running queries.", action='store_true')
+    parser.add_argument('--queries', help="show list queries.", action='store_true')
+    parser.add_argument('--minimum-age', metavar='SECONDS', default=15, type=int, help=f"minimum age of listed queries (default: {DEFAULT_MINIMUM_AGE}).")
+    parser.add_argument('--killall', help="kill all listed queries.", action='store_true')
     parser.add_argument('--kill', metavar='PID', help="kill a long running query.", type=int)
     args = parser.parse_args()
 
     with pgconnect(cfg.database.credentials, statement_timeout=1000) as con:
         if args.kill:
             kill(con, args.kill)
+
         if args.queries:
-            list_queries(con)
+            list_queries(con, age=args.minimum_age)
         if args.killall:
-            list_queries(con, killall=True)
+            list_queries(con, age=args.minimum_age, killall=True)
         if args.tables:
             list_tables(con)
