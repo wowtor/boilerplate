@@ -43,10 +43,38 @@ class Connection:
         if commit or (commit is None and self._autocommit):
             self.commit()
 
-    def vacuum(self):
+    def vacuum(self, full=False, tables=None):
+        """
+        From the postgres manual:
+        ```
+        VACUUM [ ( option [, ...] ) ] [ table_and_columns [, ...] ]
+        VACUUM [ FULL ] [ FREEZE ] [ VERBOSE ] [ ANALYZE ] [ table_and_columns [, ...] ]
+
+        where option can be one of:
+
+        FULL [ boolean ]
+        FREEZE [ boolean ]
+        VERBOSE [ boolean ]
+        ANALYZE [ boolean ]
+        DISABLE_PAGE_SKIPPING [ boolean ]
+        SKIP_LOCKED [ boolean ]
+        INDEX_CLEANUP [ boolean ]
+        TRUNCATE [ boolean ]
+
+        and table_and_columns is:
+
+        table_name [ ( column_name [, ...] ) ]
+        ```
+        """
+        q = ['VACUUM']
+        if full:
+            q.append('FULL')
+        if tables is not None:
+            q.append(','.join([f'"{tab}"' for tab in tables]))
+
         self._con.set_session(autocommit=True)
         with self.cursor() as cur:
-            cur.execute('VACUUM')
+            cur.execute(' '.join(q))
         self._con.set_session(autocommit=False)
 
     def close(self):

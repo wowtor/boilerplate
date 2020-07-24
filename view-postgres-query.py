@@ -34,15 +34,21 @@ def list_tables(con):
                         '"' || schemaname || '"."' || tablename || '"' as spec
                     FROM pg_catalog.pg_tables
                     WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+                ), tabstats as (
+                    SELECT schemaname, tablename,
+                        pg_table_size(spec) table_size,
+                        pg_total_relation_size(spec) total_size
+                    FROM entry
                 )
                 SELECT schemaname, tablename,
-                    pg_size_pretty(pg_table_size(spec)) table_size_pretty,
-                    pg_size_pretty(pg_total_relation_size(spec)) total_size_pretty
-                FROM entry
-                ORDER BY schemaname, pg_total_relation_size(spec) DESC
+                    pg_size_pretty(table_size) table_size_pretty,
+                    pg_size_pretty(total_size) total_size_pretty,
+                    (100 * total_size / (SELECT SUM(total_size) FROM tabstats sumstats WHERE schemaname = tabstats.schemaname))::INT schema_perc
+                FROM tabstats
+                ORDER BY schemaname, total_size DESC
             ''');
 
-        print(tabulate(cur.fetchall(), headers=['schema', 'table', 'table size', 'total size'], colalign=('left', 'left', 'right', 'right')))
+        print(tabulate(cur.fetchall(), headers=['schema', 'table', 'table size', 'total size', 'schema %'], colalign=('left', 'left', 'right', 'right', 'right')))
 
 
 def list_queries(con, age=0, killall=False):
@@ -71,10 +77,12 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='View long running queries.')
     parser.add_argument('--tables', help="List tables.", action='store_true')
-    parser.add_argument('--queries', help="show list queries.", action='store_true')
+    parser.add_argument('--queries', help="list queries.", action='store_true')
     parser.add_argument('--minimum-age', metavar='SECONDS', default=15, type=int, help=f"minimum age of listed queries (default: {DEFAULT_MINIMUM_AGE}).")
     parser.add_argument('--killall', help="kill all listed queries.", action='store_true')
     parser.add_argument('--kill', metavar='PID', help="kill a long running query.", type=int)
+    parser.add_argument('--vacuum', help="run vacuum.", action='store_true')
+    parser.add_argument('--vacuum-full', help="run vacuum full.", action='store_true')
     args = parser.parse_args()
 
     with pgconnect(cfg.database.credentials, statement_timeout=1000) as con:
@@ -87,3 +95,7 @@ if __name__ == '__main__':
             list_queries(con, age=args.minimum_age, killall=True)
         if args.tables:
             list_tables(con)
+
+    if args.vacuum or args.vacuum_full:
+        with pgconnect(cfg.database.credentials) as con:
+            con.vacuum(full=args.vacuum_full)
