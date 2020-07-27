@@ -56,20 +56,23 @@ def list_queries(con, age=0, killall=False):
         cur.execute(f'''
             SELECT
                 pid,
-                now() - pg_stat_activity.query_start AS duration,
+                now() - query_start AS duration,
                 query,
-                state
+                datname,
+                client_addr,
+                pg_blocking_pids(pid) blocked_by
             FROM pg_stat_activity
             WHERE state = 'active'
-                AND (now() - pg_stat_activity.query_start) > interval '{age} seconds'
+                AND (now() - query_start) > interval '{age} seconds'
             ORDER BY duration DESC
         ''')
 
-        for pid, duration, query, state in cur.fetchall():
+        for pid, duration, query, datname, client_addr, blocked_by in cur.fetchall():
             if killall:
                 kill(con, pid)
             else:
-                print('query {} running for {}: {}'.format(pid, describe_interval(duration.total_seconds()), query))
+                blocked_str = '' if not len(blocked_by) else '; blocked by ' + ', '.join([str(p) for p in blocked_by])
+                print(f'[{pid}] running on {datname} from {client_addr} for {describe_interval(duration.total_seconds())}{blocked_str}: {query}')
 
 
 if __name__ == '__main__':
