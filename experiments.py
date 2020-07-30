@@ -67,6 +67,9 @@ class Evaluation:
         self._searches = {}
 
     def parameter(self, name, default_value=None):
+        """
+        Defines a parameter with name `name` and optionally a default value.
+        """
         if name not in self._params:
             self._params[name] = Parameter(name, default_value)
 
@@ -92,6 +95,9 @@ class Evaluation:
         return self
 
     def alternatives(self, search_name):
+        """
+        Returns a list of dictionaries, with parameter names and values as key/value.
+        """
         search = self._searches[search_name]
 
         if search_name in self._params:
@@ -106,7 +112,10 @@ class Evaluation:
             return search.alternatives
 
     def defaultValues(self):
-        return dict((param.name, param.default.value) for param in self._params.values())
+        """
+        Returns a dictionary with default parameter names and values as key/value.
+        """
+        return dict((param.name, param.default.value) for param in self._params.values() if param.default.value is not None)
 
     def getFullGrid(self, names, default_values=None):
         param_values = default_values or []
@@ -121,6 +130,9 @@ class Evaluation:
                 yield from self.getFullGrid(names[1:], alt_params)
 
     def runFullGrid(self, names):
+        """
+        Runs a full grid of experiments along the dimensions in `names`.
+        """
         self.runExperiments(self.getFullGrid(names))
 
     def getSearch(self, names=None):
@@ -130,6 +142,9 @@ class Evaluation:
                     yield [(search.name, alt)]
 
     def runSearch(self, name=None):
+        """
+        Runs a series of experiments along a single dimension (if `name` is not None) or all dimensions one by one.
+        """
         self.runExperiments(self.getSearch(name))
 
     def runDefaults(self):
