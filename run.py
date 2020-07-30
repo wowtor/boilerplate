@@ -13,7 +13,7 @@ from postgres import pgconnect
 
 
 DEFAULT_LOGLEVEL = logging.WARNING
-LOG = logging.getLogger(__file__)
+LOG = logging.getLogger(__name__)
 
 
 def setupLogging(args):
