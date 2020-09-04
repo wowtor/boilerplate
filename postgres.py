@@ -1,9 +1,11 @@
 import contextlib
+import logging
 
 import psycopg2
 
 
 DEFAULT_SEARCH_PATH = ['public', 'contrib']
+LOG = logging.getLogger(__name__)
 
 
 def pgconnect(credentials, schema=None, use_wrapper=True):
@@ -16,6 +18,17 @@ def pgconnect(credentials, schema=None, use_wrapper=True):
         con = Connection(con)
 
     return con
+
+
+def reset_schema(credentials, schema, create_schema=False, drop_schema=False):
+    with pgconnect(credentials) as con:
+        with con.cursor() as cur:
+            if drop_schema:
+                LOG.info('drop schema (if exists)')
+                cur.execute('DROP SCHEMA IF EXISTS %s CASCADE' % schema)
+
+            if create_schema:
+                cur.execute('CREATE SCHEMA IF NOT EXISTS %s' % schema)
 
 
 class Connection:
