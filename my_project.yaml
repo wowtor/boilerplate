@@ -2,7 +2,7 @@ resultdir: output
 
 database:
   credentials:
-    host: database-server
-    user: my-project
-    database: my-project
-  schema: production
+    host: localhost
+    user: myproject
+    database: myproject
+  schema: development

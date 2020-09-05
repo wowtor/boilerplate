@@ -1,10 +1,12 @@
 import argparse
 import collections
 import datetime
+import hashlib
 import logging
 import os
 import random
 import shutil
+import subprocess
 import time
 
 from . import postgres
@@ -12,6 +14,23 @@ from . import postgres
 
 DEFAULT_LOGLEVEL = logging.WARNING
 LOG = logging.getLogger(__name__)
+
+
+class Operation:
+    def __init__(self, name, func, args=None, run_by_default=True):
+        self.name = name
+        self.func = func
+        self.args = args
+        self.run_by_default = run_by_default
+
+    def asTuple(self):
+        return (self.name, self.func, self.args, self.run_by_default)
+
+    def __iter__(self):
+        return self.asTuple().__iter__()
+
+    def __getitem__(self, idx):
+        return self.asTuple().__getitem__(idx)
 
 
 class BasicApp:
@@ -52,41 +71,52 @@ class BasicApp:
         self.args = self.parser.parse_args()
         self.setupLogging(f'{self.app_name}.log', self.args.v - self.args.q)
 
-    def setRandomSeed(self, seed):
+    def setRandomSeed(self, name):
+        """
+        Sets the random seed in the `random` package and returns the seed, which is a 32 bit unsigned int
+        """
+        m = hashlib.sha256()
+        m.update(name.encode('utf8'))
+        seed = int.from_bytes(m.digest(), byteorder='little', signed=False) & 0xffffffff
         random.seed(seed)
+        return seed
 
     def run(self):
         self.prepare()
 
         ops = self.getOperations()
-        if self.args.run is not None:
-            ops = [ step for step in ops if step[0] in self.args.run ]
-            for selected_op in self.args.run:
-                if selected_op not in zip(*ops)[0]:
-                    raise ValueError(f'operation not available: {selected_op}')
+        if self.args.run is None:
+            ops = [ step for step in ops if step.run_by_default ]
+        else:
+            ops = [ step for step in ops if step.name in self.args.run ]
+            missing_ops = [ name for name in self.args.run if name not in next(zip(*ops)) ]
+            if len(missing_ops) > 0:
+                raise ValueError(f'operations not available: {", ".join(missing_ops)}')
 
         if self.args.list:
-            print('\n'.join([name for name, _, _ in ops]))
+            print('\n'.join([(op.name if op.run_by_default else f'({op.name})') for op in ops]))
             return
 
-        stepno = 0
-        for name, step in ops:
-            self.setRandomSeed(int(stepno / len(ops) * 2 ** 30))
+        for op in ops:
+            self.setRandomSeed(op.name)
 
             timestr = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            print('{} Processing {} ...'.format(timestr, name))
+            print('{} Processing {} ...'.format(timestr, op.name))
 
             t1_start = time.perf_counter()
             t2_start = time.process_time()
 
-            step()
+            if op.args is None:
+                op.func()
+            elif isinstance(op.args, dict):
+                op.func(**op.args)
+            else:
+                op.func(*op.args)
 
             t1_stop = time.perf_counter()
             t2_stop = time.process_time()
-            print(f"Processing {name}: {round((t1_stop - t1_start) / 60, 1)} minutes elapsed; "
+            print(f"Processing {op.name}: {round((t1_stop - t1_start) / 60, 1)} minutes elapsed; "
                   f"{round((t2_stop - t2_start) / 60, 1)} minutes CPU time")
-
-            stepno += 1
 
 
 class PostgresApp(BasicApp):
@@ -104,12 +134,23 @@ class PostgresApp(BasicApp):
         super().prepare()
         self.resultdir = self.args.resultdir
 
-    def setRandomSeed(self, seed):
-        super().setRandomSeed(seed)
+    def setRandomSeed(self, name):
+        seed = super().setRandomSeed(name)
 
         if self.pgcon is not None:
             with self.pgcon.cursor() as cur:
-                cur.execute(f'SET seed TO {seed}')
+                cur.execute(f'SET seed TO {seed / 2**32}')
+
+    def setupDatabase(self):
+        assert self.database_credentials.host == 'localhost', 'database host is not localhost; please change host or use an existing database'
+
+        sql = f""" \
+            CREATE USER {self.database_credentials.user} WITH PASSWORD '{self.database_credentials.password}'; \
+            CREATE DATABASE {self.database_credentials.database} WITH OWNER {self.database_credentials.user}; \
+        """
+
+        with subprocess.Popen(['sudo', '-u', 'postgres', 'psql'], stdin=subprocess.PIPE) as proc:
+            proc.stdin.write(sql.encode('utf8'))
 
     def clearResults(self):
         if os.path.exists(self.resultdir):
@@ -118,7 +159,7 @@ class PostgresApp(BasicApp):
         postgres.reset_schema(self.database_credentials, self.args.sql_schema, create_schema=False, drop_schema=True)
 
     def setupConnection(self):
-        postgres.reset_schema(self.database_credentials, self.args.sql_schema, self.resultdir, create_schema=True)
+        postgres.reset_schema(self.database_credentials, self.args.sql_schema, create_schema=True, drop_schema=False)
         self.pgcon = postgres.pgconnect(credentials=self.database_credentials, schema=self.args.sql_schema)
 
     def runStep(self, func, ctx):

@@ -2,10 +2,11 @@
 
 import contextlib
 import logging
+import os
 
 import confidence
 
-from boilerplate.app import PostgresApp
+from boilerplate.app import PostgresApp, Operation
 
 
 LOG = logging.getLogger(__name__)
@@ -14,15 +15,17 @@ LOG = logging.getLogger(__name__)
 class ProjectApp(PostgresApp):
     def __init__(self, database_credentials, default_database_schema, default_resultdir):
         super().__init__('my_project', database_credentials, default_database_schema, default_resultdir)
+        self.parser.add_argument('--setup-database', help='create user and database on local postgres server', action='store_true')
 
     def doStuff(self):
         pass
 
     def getOperations(self):
         return [
-            ('clean', self.clearResults),
-            ('init', self.setupConnection),
-            ('do_stuff', self.doStuff),
+            Operation('setup_database', self.setupDatabase, run_by_default=False),
+            Operation('clean', self.clearResults),
+            Operation('init', self.setupConnection),
+            Operation('do_stuff', self.doStuff),
         ]
 
 
