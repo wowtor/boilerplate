@@ -22,7 +22,7 @@ class ProjectApp(PostgresApp):
 
     def getOperations(self):
         return [
-            Operation('setup_database', self.setupDatabase, run_by_default=False),
+            Operation('create_database', self.setupDatabase, run_by_default=False),
             Operation('clean', self.clearResults),
             Operation('init', self.setupConnection),
             Operation('do_stuff', self.doStuff),
