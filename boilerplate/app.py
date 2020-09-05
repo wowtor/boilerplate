@@ -89,7 +89,7 @@ class BasicApp:
             ops = [ step for step in ops if step.run_by_default ]
         else:
             ops = [ step for step in ops if step.name in self.args.run ]
-            missing_ops = [ name for name in self.args.run if name not in next(zip(*ops)) ]
+            missing_ops = self.args.run if len(ops) == 0 else [ name for name in self.args.run if name not in next(zip(*ops)) ]
             if len(missing_ops) > 0:
                 raise ValueError(f'operations not available: {", ".join(missing_ops)}')
 
