@@ -76,7 +76,7 @@ def list_queries(con, age=0, killall=False):
 
 
 if __name__ == '__main__':
-    cfg = confidence.load_name('my_project', 'local')
+    cfg = confidence.load_name('project', 'local')
 
     parser = argparse.ArgumentParser(description='View long running queries.')
     parser.add_argument('--tables', help="List tables.", action='store_true')

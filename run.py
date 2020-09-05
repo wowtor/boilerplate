@@ -30,7 +30,7 @@ class ProjectApp(PostgresApp):
 
 
 if __name__ == '__main__':
-    cfg = confidence.load_name('my_project', 'local')
+    cfg = confidence.load_name('project', 'local')
 
     with contextlib.closing(ProjectApp(cfg.database.credentials, cfg.database.schema, cfg.resultdir)) as app:
         app.run()
