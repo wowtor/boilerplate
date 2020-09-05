@@ -7,7 +7,7 @@ import random
 import shutil
 import time
 
-import postgres
+from . import postgres
 
 
 DEFAULT_LOGLEVEL = logging.WARNING

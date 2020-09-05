@@ -8,10 +8,12 @@ DEFAULT_SEARCH_PATH = ['public', 'contrib']
 LOG = logging.getLogger(__name__)
 
 
-def pgconnect(credentials, schema=None, use_wrapper=True):
+def pgconnect(credentials, schema=None, use_wrapper=True, statement_timeout=None):
     credentials = dict(credentials.items())
     search_path = [schema] + DEFAULT_SEARCH_PATH if schema is not None else DEFAULT_SEARCH_PATH
     credentials['options'] = f'-c search_path={",".join(search_path)}'
+    if statement_timeout is not None:
+        credentials['options'] += f' -c statement_timeout={statement_timeout}'
     con = psycopg2.connect(**credentials)
 
     if use_wrapper:

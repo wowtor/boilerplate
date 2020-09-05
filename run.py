@@ -5,13 +5,13 @@ import logging
 
 import confidence
 
-import app
+from boilerplate.app import PostgresApp
 
 
 LOG = logging.getLogger(__name__)
 
 
-class ProjectApp(app.PostgresApp):
+class ProjectApp(PostgresApp):
     def __init__(self, database_credentials, default_database_schema, default_resultdir):
         super().__init__('my_project', database_credentials, default_database_schema, default_resultdir)
 

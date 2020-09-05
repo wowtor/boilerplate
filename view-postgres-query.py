@@ -5,7 +5,7 @@ import argparse
 import confidence
 from tabulate import tabulate
 
-from postgres import pgconnect
+from boilerplate.postgres import pgconnect
 
 
 DEFAULT_MINIMUM_AGE = 15
