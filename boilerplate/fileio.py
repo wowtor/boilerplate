@@ -1,4 +1,5 @@
 import hashlib
+import io
 
 
 def load_hashtable(path):
@@ -21,23 +22,42 @@ class sha256_open:
     digest. If there is a mismatch, an exception is raised.
 
     Currently, limitations are as follows:
-    - only binary file reading is supported;
     - only SHA256 digests are supported; and
     - the file must be read fully and sequentially.
     """
-    def __init__(self, path, hashvalue):
+    def __init__(self, path, hashvalue, mode='t', encoding='utf8'):
         self.path = path
         self.hashvalue = hashvalue
+        self._mode = mode
+        self._encoding = encoding
+
+        for illegal_mode in 'wxa+':
+            assert illegal_mode not in self._mode, f'mode {illegal_mode} not supported'
 
     def __enter__(self):
         self._f = open(self.path, 'br')
         self._m = hashlib.sha256()
-        return self
+
+        if 't' in self._mode:
+            return io.TextIOWrapper(io.BufferedReader(self), encoding=self._encoding)
+        else:
+            return self
 
     def read(self, size=-1):
         b = self._f.read(size)
         self._m.update(b)
         return b
+
+    def readall(self):
+        b = self._f.readall()
+        self._m.update(b)
+        return b
+
+    def readinto(self, b):
+        n = self._f.readinto(b)
+        if n is not None:
+            self._m.update(b[:n])
+        return n
 
     def check_digest(self):
         assert self._m.hexdigest() == self.hashvalue, 'sha256 checksum mismatch'
@@ -45,6 +65,9 @@ class sha256_open:
     def close(self):
         self.check_digest()
         self._f.close()
+
+    def __getattr__(self, name):
+        return eval(f'self._f.{name}')
 
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type is None:

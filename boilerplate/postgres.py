@@ -3,7 +3,6 @@ import logging
 
 import psycopg2
 
-
 DEFAULT_SEARCH_PATH = ['public', 'contrib']
 LOG = logging.getLogger(__name__)
 
