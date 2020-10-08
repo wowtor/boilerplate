@@ -129,6 +129,14 @@ class BasicApp:
         self.prepare()
 
         ops = self.get_operations()
+        if self.args.list:
+            print(
+                "\n".join(
+                    [(op.name if op.run_by_default else f"({op.name})") for op in ops]
+                )
+            )
+            return
+
         if self.args.run is None:
             ops = [step for step in ops if step.run_by_default]
         else:
@@ -140,14 +148,6 @@ class BasicApp:
             )
             if len(missing_ops) > 0:
                 raise ValueError(f'operations not available: {", ".join(missing_ops)}')
-
-        if self.args.list:
-            print(
-                "\n".join(
-                    [(op.name if op.run_by_default else f"({op.name})") for op in ops]
-                )
-            )
-            return
 
         for op in ops:
             # TODO: This line does not do anything. It calls a function which returns something which is not used
@@ -183,10 +183,10 @@ class PostgresApp(BasicApp):
         self._pgseed = None
 
         self.parser.add_argument(
-            "--resultdir", help="where to store results", default=default_resultdir
+            "--resultdir", help=f"where to store results (default: {default_resultdir})", default=default_resultdir
         )
         self.parser.add_argument(
-            "--sql-schema", help="SQL schema used", default=default_database_schema
+            "--sql-schema", help=f"SQL schema used (default: {default_database_schema})", default=default_database_schema
         )
 
     def prepare(self):
@@ -257,7 +257,7 @@ class PostgresApp(BasicApp):
         self._pgcon = postgres.pgconnect(
             credentials=self.database_credentials,
             schema=self.args.sql_schema,
-            use_wrapper=False,
+            use_wrapper=True,
         )
 
         if self._pgseed is not None:  # seed setting postponed; do it now

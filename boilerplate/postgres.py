@@ -1,4 +1,3 @@
-import contextlib
 import logging
 
 import psycopg2
@@ -7,7 +6,7 @@ DEFAULT_SEARCH_PATH = ['public', 'contrib']
 LOG = logging.getLogger(__name__)
 
 
-def pgconnect(credentials, schema=None, use_wrapper=True, statement_timeout=None):
+def pgconnect(credentials, schema=None, use_wrapper=True, statement_timeout=None, autocommit=False):
     credentials = dict(credentials.items())
     search_path = [schema] + DEFAULT_SEARCH_PATH if schema is not None else DEFAULT_SEARCH_PATH
     credentials['options'] = f'-c search_path={",".join(search_path)}'
@@ -15,14 +14,16 @@ def pgconnect(credentials, schema=None, use_wrapper=True, statement_timeout=None
         credentials['options'] += f' -c statement_timeout={statement_timeout}'
     con = psycopg2.connect(**credentials)
 
+    assert use_wrapper or not autocommit
+
     if use_wrapper:
-        con = Connection(con)
+        con = Connection(con, autocommit=autocommit)
 
     return con
 
 
 def reset_schema(credentials, schema, create_schema=False, drop_schema=False):
-    with pgconnect(credentials) as con:
+    with pgconnect(credentials, autocommit=True) as con:
         with con.cursor() as cur:
             if drop_schema:
                 LOG.info('drop schema (if exists)')
@@ -32,11 +33,46 @@ def reset_schema(credentials, schema, create_schema=False, drop_schema=False):
                 cur.execute('CREATE SCHEMA IF NOT EXISTS %s' % schema)
 
 
+class Cursor:
+    def __init__(self, con, commit_on_close, **kw):
+        self.connection = con
+        self.commit_on_close = commit_on_close
+        self._cur = self.connection.cursor(**kw)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.close()
+
+    def __iter__(self):
+        return self._cur.__iter__()
+
+    def __next__(self):
+        return self._cur.__next__()
+
+    def execute(self, query, *args):
+        try:
+            self._cur.execute(query, *args)
+            LOG.debug(f'query: {self._cur.query.decode("utf8")}')
+        except Exception as e:
+            LOG.warning(f'query failed: {self._cur.query.decode("utf8")}; error: {e}')
+            raise
+
+    def __getattr__(self, name):
+        return eval(f'self._cur.{name}')
+
+    def close(self):
+        if self.commit_on_close:
+            self.connection.commit()
+        self._cur.close()
+
+
 class Connection:
     """
         Database connection object wrapper
     """
-    def __init__(self, con, autocommit=True):
+    def __init__(self, con, autocommit=False):
         self._con = con
         self._autocommit = autocommit
         self._con.set_client_encoding('UTF8')
@@ -50,12 +86,8 @@ class Connection:
     def commit(self):
         self._con.commit()
 
-    @contextlib.contextmanager
     def cursor(self, commit=None, **kwargs):
-        yield self._con.cursor(**kwargs)
-
-        if commit or (commit is None and self._autocommit):
-            self.commit()
+        return Cursor(self._con, commit or (commit is None and self._autocommit), **kwargs)
 
     def vacuum(self, full=False, tables=None):
         """

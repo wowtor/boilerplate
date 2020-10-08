@@ -1,5 +1,9 @@
 import hashlib
 import io
+import logging
+
+
+LOG = logging.getLogger(__name__)
 
 
 def load_hashtable(path):
@@ -16,6 +20,27 @@ def load_hashtable(path):
     return result
 
 
+def assert_match(found, expected, path, algorithm, on_mismatch):
+    if found != expected:
+        msg = f'{path}: {algorithm} checksum mismatch; found: {found}; expected: {expected}'
+        if on_mismatch == 'raise':
+            raise ValueError(msg)
+        elif on_mismatch == 'warn':
+            LOG.warning(msg)
+        elif on_mismatch == 'ignore':
+            pass
+        else:
+            raise ValueError(f'illegal action: {on_mismatch}')
+
+
+def check_file(path, expected_digest, algorithm='sha256', on_mismatch='raise'):
+    m = hashlib.new(algorithm)
+    with open(path, 'rb') as f:
+        m.update(f.read())
+
+    assert_match(m.hexdigest(), expected_digest, path, algorithm, on_mismatch)
+
+
 class sha256_open:
     """
     Replacement for the `open` function which transparently checks the message
@@ -25,11 +50,12 @@ class sha256_open:
     - only SHA256 digests are supported; and
     - the file must be read fully and sequentially.
     """
-    def __init__(self, path, hashvalue, mode='t', encoding='utf8'):
+    def __init__(self, path, hashvalue, mode='t', encoding='utf8', on_mismatch='raise'):
         self.path = path
         self.hashvalue = hashvalue
         self._mode = mode
         self._encoding = encoding
+        self._on_mismatch = on_mismatch
 
         for illegal_mode in 'wxa+':
             assert illegal_mode not in self._mode, f'mode {illegal_mode} not supported'
@@ -60,7 +86,7 @@ class sha256_open:
         return n
 
     def check_digest(self):
-        assert self._m.hexdigest() == self.hashvalue, 'sha256 checksum mismatch'
+        assert_match(self._m.hexdigest(), self.hashvalue, self.path, algorithm='sha256', on_mismatch=self._on_mismatch)
 
     def close(self):
         self.check_digest()
