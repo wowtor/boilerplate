@@ -9,7 +9,11 @@ import shutil
 import subprocess
 import time
 
-from . import postgres
+# postgres is required only when `PostgresApp` is instantiated
+try:
+    from . import postgres
+except:
+    pass
 
 
 DEFAULT_LOGLEVEL = logging.WARNING
@@ -21,7 +25,7 @@ class Operation:
     Container of ETL descriptions.
     """
 
-    def __init__(self, name: str, func, run_by_default: bool = False):
+    def __init__(self, name: str, func, run_by_default: bool = True):
         """
         Creates an ETL metadata object.
 
@@ -53,8 +57,24 @@ class Operation:
 
 
 class BasicApp:
-    def __init__(self, app_name: str):
+    """
+    Base class for a basic application.
+    """
+    def __init__(self, app_name: str, operations: list):
+        """
+        Arguments:
+            - app_name: a short text describing the app
+            - operations: a function or a list of `Operation`.
+                If `operations` is a list of `Operation`, its contents are
+                `Operation` objects which contain functions that can be called
+                directly by the application.
+                If `operations` is a function, the function will be called at
+                runtime to retrieve the list of `Operation`s. The function
+                should accept exactly one argument, namely a `BasicApp`
+                instance, and return a list of `Operation`s.
+        """
         self.app_name = app_name
+        self.operations = operations
 
         self.parser = argparse.ArgumentParser(description=app_name)
         ops = self.parser.add_argument_group("operations")
@@ -72,6 +92,15 @@ class BasicApp:
         self.parser.add_argument(
             "-q", help="decreases verbosity", action="count", default=0
         )
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.close()
+
+    def close(self):
+        pass
 
     def setup_logging(self, file_path: str, level_increase: int):
         loglevel = max(
@@ -119,7 +148,10 @@ class BasicApp:
         return seed
 
     def get_operations(self):
-        raise NotImplementedError('should be implemented by subclass')
+        if callable(self.operations):
+            return self.operations(self)
+        else:
+            return self.operations
 
     def run(self):
         """
@@ -170,13 +202,23 @@ class BasicApp:
 
 
 class PostgresApp(BasicApp):
+    """
+    Subclass of `BasicApp` which adds Postgres connection management.
+    """
     def __init__(
-        self, app_name: str, database_credentials: dict, default_database_schema: str, default_resultdir: str
+        self, app_name: str, operations: list, database_credentials: dict, default_database_schema: str, default_resultdir: str
     ):
         """
-        Subclass of BasicApp which adds Postgres connection management.
+        Arguments:
+            - app_name: a short text describing the app
+            - operations: a function or a list of `Operation`; see `BasicApp.__init__()`.
+            - database_credentials: a dictionary of credentials to be passed to `psycopg2.connect`.
+            - default_database_schema: database schema to be used; may be overridden by command line argument.
+            - default_resultdir: filesystem directory where results may be written; may be overridden by command line argument.
         """
-        super().__init__(app_name)
+        super().__init__(app_name, operations)
+
+        assert 'postgres' in globals(), 'postgres not available; try `pip install psycopg2-binary`'
 
         self.database_credentials = database_credentials
         self._pgcon = None
@@ -277,6 +319,7 @@ class PostgresApp(BasicApp):
         func()
 
     def close(self):
+        super().close()
         if self._pgcon is not None:
             self._pgcon.close()
             self._pgcon = None
