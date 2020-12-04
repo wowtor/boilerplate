@@ -75,7 +75,7 @@ class sha256_open:
         return b
 
     def readall(self):
-        b = self._f.readall()
+        b = self._f.read()
         self._m.update(b)
         return b
 
@@ -96,7 +96,8 @@ class sha256_open:
         return eval(f'self._f.{name}')
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if exc_type is None:
-            self.check_digest()
-
-        self._f.__exit__(exc_type, exc_value, traceback)
+        try:
+            if exc_type is None:
+                self.check_digest()
+        finally:
+            self._f.close()
