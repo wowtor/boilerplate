@@ -262,7 +262,7 @@ class PostgresApp(BasicApp):
         # This creates a new database and installs
         sql = f""" \
             CREATE USER {self.database_credentials.user} WITH PASSWORD '{self.database_credentials.password}'; \
-            CREATE DATABASE {self.database_credentials.database} WITH OWNER {self.database_credentials.user}; \
+            CREATE DATABASE {self.database_credentials.dbname} WITH OWNER {self.database_credentials.user}; \
         """
 
         # this will not work when your database is on a different machine
