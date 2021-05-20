@@ -60,7 +60,7 @@ class Cursor:
             raise
 
     def __getattr__(self, name):
-        return eval(f'self._cur.{name}')
+        return getattr(self._cur, name)
 
     def close(self):
         if self.commit_on_close:
@@ -134,4 +134,4 @@ class Connection:
         return sqlalchemy.create_engine('postgresql://', creator=lambda: self._con)
 
     def __getattr__(self, name):
-        return eval(f'self._con.{name}')
+        return getattr(self._con, name)
