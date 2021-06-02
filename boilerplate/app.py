@@ -103,7 +103,7 @@ class BasicApp:
         pass
 
     def setup_logging(self, file_path: str, level_increase: int):
-        loglevel = max(
+        self._loglevel = max(
             logging.DEBUG, min(logging.CRITICAL, DEFAULT_LOGLEVEL - level_increase * 10)
         )
 
@@ -113,7 +113,7 @@ class BasicApp:
 
         ch = logging.StreamHandler()
         ch.setFormatter(fmt)
-        ch.setLevel(loglevel)
+        ch.setLevel(self._loglevel)
         logging.getLogger().addHandler(ch)
 
         # setup a file handler
@@ -124,7 +124,7 @@ class BasicApp:
         fh.setLevel(logging.INFO)
         logging.getLogger().addHandler(fh)
 
-        logging.getLogger("").setLevel(logging.DEBUG)
+        logging.getLogger("").setLevel(self._loglevel)
 
     def prepare(self):
         """
