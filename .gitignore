@@ -1,4 +1,7 @@
 *~
 *.log
 *.log.0
+
+/venv
+
 __pycache__
