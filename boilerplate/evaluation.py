@@ -7,99 +7,132 @@ def run_experiment(desc, data, clf):
     ...
     return results
 
-def aggregate_results(results):
-    ...
 
-exp = Evaluation(run_experiment, aggregate_results)
+# Parameter search
+exp = Evaluation(run_experiment)
 exp.parameter('data', my_data)
 exp.parameter('clf', LogisticRegression())
+for selected_params, param_values, results in exp.runParameterSearch("clf", [LogisticRegression(), SVC()]):
+    # do something sensible with the results
+    ...
 
-exp.runParameterSearch("clf", [LogisticRegression(), SVC()])
-```
+
+# Grid search
+exp = Evaluation(run_experiment)
+exp.parameter('data', my_data)  # Default value for parameter
+exp.parameter('clf', LogisticRegression())  # Default value for parameter
+for selected_params, param_values, results in exp.runFullGrid({'n_most_common_words': [5, 10, 20, 30],
+                'binning_strategy', [regular_binning_strategy, mismatch_binning_strategy]}):
+    # do something sensible with the results
+    ...
 """
+import collections
+import itertools
+import logging
+from collections import Callable
+from typing import Optional, List, Any, Dict, Union
+
+LOG = logging.getLogger(__name__)
+
+
 class DescribedValue:
-    def __init__(self, value):
-        if isinstance(value, tuple):
-            self._desc, self.value = value
+    def __init__(self, value: Any, desc: Optional[str] = None):
+        if isinstance(value, DescribedValue):
+            self.value = value.value
+            self._desc = desc or value._desc
         else:
             self.value = value
-            self._desc = None
+            self._desc = desc
 
     def __repr__(self):
         return self._desc or str(self.value)
 
 
-class DescribedDict(dict):
-    def __init__(self, desc, *args, **kwargs):
-        dict.__init__(self, *args, **kwargs)
-        self.desc = desc
-
-    def __repr__(self):
-        return self.desc
-
-
 class Setup:
-    def __init__(self, evaluate, aggregate_results=None):
+    def __init__(self, evaluate: Callable):
         self._evaluate = evaluate
-        self._aggregate_results = aggregate_results
-        self._params = {}
+        self._default_values = {}
 
-    def parameter(self, name, default_value=None):
+    def parameter(self, name: str, default_value=None):
         """
         Defines a parameter with name `name` and optionally a default value.
         """
-        self._params[name] = DescribedValue(default_value)
+        self._default_values[name] = DescribedValue(default_value)
         return self
 
     def defaultValues(self):
         """
         Returns a dictionary with default parameter names and values as key/value.
         """
-        return dict((name, described_value.value) for name, described_value in self._params.items() if described_value.value is not None)
+        return {name: described_value.value for name, described_value in self._default_values.items()}
 
-    def getFullGrid(self, dimensions, default_values=None):
-        raise ValueError("not implemented")
-
-    def runFullGrid(self, dimensions, default_values=None):
+    def runFullGrid(self, parameter_ranges: Dict[str, List[Any]], default_values: Optional[Dict[str, Any]] = None):
         """
         Runs a full grid of experiments along the dimensions in `names`.
-        """
-        self.runExperiments(self.getFullGrid(dimensions), default_values)
 
-    def runParameterSearch(self, name, values, default_values=None, aggregate_kw={}):
+        Parameters:
+            - parameter_ranges: `dict` of parameters included in gridsearch; keys are parameter names, values are lists
+              of parameter values
+            - default_values: any predefined parameter values
+        """
+        parameter_ranges = collections.OrderedDict(parameter_ranges.items())
+        combinations = itertools.product(*parameter_ranges.values())
+
+        experiments = [
+            collections.OrderedDict([(dim, DescribedValue(combi[i])) for i, dim in enumerate(parameter_ranges.keys())])
+            for combi in combinations]
+        yield from self.runExperiments(experiments, default_values=default_values)
+
+    def runParameterSearch(self, name: str, values: List[Any], default_values: Optional[Dict[str, Any]] = None):
         """
         Runs a series of experiments, varying a single parameter value.
+
+        Parameters:
+            - name: name of parameters for the search
+            - values: the values to try out in this search
+            - default_values: any predefined parameter values
         """
         experiments = [{name: DescribedValue(value)} for value in values]
-        self.runExperiments(experiments, default_values=default_values, aggregate_kw=aggregate_kw)
+        yield from self.runExperiments(experiments, default_values=default_values)
 
     def runDefaults(self):
-        return self.runExperiment({})[1]
+        """
+        Runs an experiment with the default values and returns the result
+        """
+        return self.runExperiment({})[2]
 
-    def runExperiment(self, param_set, default_values=None):
+    def runExperiment(self, param_set: Dict[str, Any], default_values: Optional[Dict[str, Any]] = None):
         """
         Runs a single experiment.
         
         Parameters:
         -----------
-        param_set: a dictionary, with parameter names as keys, and `DescribedValue`s as values
-        default_values: a dictionary, with parameter names as keys, and their values as values
+            - param_set: a dictionary, with parameter names as keys
+            - default_values: any predefined parameter values
         """
-        param_values = default_values.copy() if default_values is not None else self.defaultValues()
+        defaults = self.defaultValues()
+        if default_values is not None:
+            defaults.update(default_values)
+
+        param_values = defaults.copy()
         for name, value in param_set.items():
             param_values[name] = value.value
 
         result = self._evaluate(**param_values, selected_params=param_set)
-        return param_set.items(), result
+        return param_set, param_values, result
 
-    def runExperiments(self, experiments, default_values=None, aggregate_kw={}):
+    def runExperiments(self, experiments: Union[List[Dict[str, Any]], Dict[str, Any]], default_values=None):
         """
-        Carry out a range of experiments, for example varying one parameter.
-        """
-        results = []
+        Carry out a range of experiments, for example varying one parameter or doing a gridsearch.
 
+        Parameters:
+        -----------
+            - experiments: a list of experiments to run
+            - default_values: any predefined parameter values
+        """
+        # Run the experiments
         for param_set in experiments:
-            results.append(self.runExperiment(param_set, default_values))
-
-        if self._aggregate_results and results:
-            self._aggregate_results(results, **aggregate_kw)
+            try:
+                yield self.runExperiment(param_set, default_values)
+            except Exception as e:
+                LOG.warning(f"experiment aborted: {e}; params: {param_set}")
