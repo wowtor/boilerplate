@@ -2,14 +2,14 @@
 Example of use:
 
 ```python
-def run_experiment(desc, data, clf):
+def run_experiment(selected_params, data, clf):
     clf.fit(data.X, data.y)
     ...
     return results
 
 
 # Parameter search
-exp = Evaluation(run_experiment)
+exp = Setup(run_experiment)
 exp.parameter('data', my_data)
 exp.parameter('clf', LogisticRegression())
 for selected_params, param_values, results in exp.runParameterSearch("clf", [LogisticRegression(), SVC()]):
@@ -18,7 +18,7 @@ for selected_params, param_values, results in exp.runParameterSearch("clf", [Log
 
 
 # Grid search
-exp = Evaluation(run_experiment)
+exp = Setup(run_experiment)
 exp.parameter('data', my_data)  # Default value for parameter
 exp.parameter('clf', LogisticRegression())  # Default value for parameter
 for selected_params, param_values, results in exp.runFullGrid({'n_most_common_words': [5, 10, 20, 30],
