@@ -29,8 +29,7 @@ for selected_params, param_values, results in exp.runFullGrid({'n_most_common_wo
 import collections
 import itertools
 import logging
-from collections import Callable
-from typing import Optional, List, Any, Dict, Union
+from typing import Optional, List, Any, Dict, Union, Callable
 
 LOG = logging.getLogger(__name__)
 
