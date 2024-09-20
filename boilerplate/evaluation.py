@@ -29,7 +29,7 @@ for selected_params, param_values, results in exp.runFullGrid({'n_most_common_wo
 import collections
 import itertools
 import logging
-from typing import Optional, List, Any, Dict, Union, Callable
+from typing import Optional, List, Any, Dict, Union, Callable, Iterable, Tuple, Mapping
 
 LOG = logging.getLogger(__name__)
 
@@ -46,26 +46,32 @@ class DescribedValue:
     def __repr__(self):
         return self._desc or str(self.value)
 
+    def __hash__(self):
+        return hash(str(self.value) + self._desc)
+
+    def __eq__(self, other):
+        return hash(other) == hash(self)
+
 
 class Setup:
     def __init__(self, evaluate: Callable):
         self._evaluate = evaluate
         self._default_values = {}
 
-    def parameter(self, name: str, default_value=None):
+    def parameter(self, name: str, default_value=None) -> "Setup":
         """
         Defines a parameter with name `name` and optionally a default value.
         """
         self._default_values[name] = DescribedValue(default_value)
         return self
 
-    def defaultValues(self):
+    def defaultValues(self) -> Mapping[str, Any]:
         """
         Returns a dictionary with default parameter names and values as key/value.
         """
         return {name: described_value.value for name, described_value in self._default_values.items()}
 
-    def runFullGrid(self, parameter_ranges: Dict[str, List[Any]], default_values: Optional[Dict[str, Any]] = None):
+    def runFullGrid(self, parameter_ranges: Dict[str, List[Any]], default_values: Optional[Dict[str, Any]] = None) -> Iterable[Tuple[Mapping[str, Any], Mapping[str, Any], Any]]:
         """
         Runs a full grid of experiments along the dimensions in `names`.
 
@@ -82,7 +88,7 @@ class Setup:
             for combi in combinations]
         yield from self.runExperiments(experiments, default_values=default_values)
 
-    def runParameterSearch(self, name: str, values: List[Any], default_values: Optional[Dict[str, Any]] = None):
+    def runParameterSearch(self, name: str, values: List[Any], default_values: Optional[Dict[str, Any]] = None) -> Iterable[Tuple[Mapping[str, Any], Mapping[str, Any], Any]]:
         """
         Runs a series of experiments, varying a single parameter value.
 
@@ -94,13 +100,13 @@ class Setup:
         experiments = [{name: DescribedValue(value)} for value in values]
         yield from self.runExperiments(experiments, default_values=default_values)
 
-    def runDefaults(self):
+    def runDefaults(self) -> Any:
         """
         Runs an experiment with the default values and returns the result
         """
         return self.runExperiment({})[2]
 
-    def runExperiment(self, param_set: Dict[str, Any], default_values: Optional[Dict[str, Any]] = None):
+    def runExperiment(self, param_set: Dict[str, Any], default_values: Optional[Dict[str, Any]] = None) -> Tuple[Mapping[str, Any], Mapping[str, Any], Any]:
         """
         Runs a single experiment.
         
@@ -120,7 +126,7 @@ class Setup:
         result = self._evaluate(**param_values, selected_params=param_set)
         return param_set, param_values, result
 
-    def runExperiments(self, experiments: Union[List[Dict[str, Any]], Dict[str, Any]], default_values=None):
+    def runExperiments(self, experiments: Union[List[Dict[str, Any]], Dict[str, Any]], default_values=None) -> Iterable[Tuple[Mapping[str, Any], Mapping[str, Any], Any]]:
         """
         Carry out a range of experiments, for example varying one parameter or doing a gridsearch.
 
